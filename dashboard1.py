@@ -2,101 +2,172 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 
-# Link da planilha no Google Sheets (exemplo)
-sheet_url = "https://docs.google.com/spreadsheets/d/11kY8TYVY1qY0wQP4smjoSfYXDN3s6S0y8h2PyxAyPCk/pub?output=csv"
+# Configurar o layout da página como wide (mais amplo)
+st.set_page_config(page_title="Dashboard de Produtos e Vendas", layout="wide")
+
+# Links das planilhas no Google Sheets
+sheet_url_produtos = "https://docs.google.com/spreadsheets/d/11kY8TYVY1qY0wQP4smjoSfYXDN3s6S0y8h2PyxAyPCk/pub?output=csv"
+sheet_url_vendas = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTkWFrz89PS9bCsPIN5uXk17FoJCixJUfMlQ-GUwlJKsFRZQ7sSsxhClXP1nYMZbTx6SxG-7CQWGbqB/pub?output=csv"
 
 # Carregar os dados do Google Sheets usando pandas
-df = pd.read_csv(sheet_url)
+df_produtos = pd.read_csv(sheet_url_produtos)
+df_vendas = pd.read_csv(sheet_url_vendas)
 
 # Limpando espaços em branco nos nomes das colunas (se necessário)
-df.columns = df.columns.str.strip()
+df_produtos.columns = df_produtos.columns.str.strip()
+df_vendas.columns = df_vendas.columns.str.strip()
 
-# Definir a variável com o número total de produtos únicos
-numero_total_produtos = df['produto'].nunique()
+# Converter as colunas 'vendas' e 'lucro' para tipo float (números), se necessário
+df_vendas['vendas'] = pd.to_numeric(df_vendas['vendas'], errors='coerce')
+df_vendas['lucro'] = pd.to_numeric(df_vendas['lucro'], errors='coerce')
 
-# Função para ajustar o estilo dos cartões com CSS
+# --- Filtros ---
+# Filtro de período (trimestre, semestre, anual)
+periodo_selecionado = st.selectbox("Selecione o período", ["Trimestre", "Semestre", "Anual"])
+
+# Filtro de data (dia, mês, ano)
+data_inicio = st.date_input("Selecione a data de início")
+data_fim = st.date_input("Selecione a data de fim")
+
+# Filtro por estado
+estados_selecionados = st.multiselect("Selecione o(s) estado(s)", df_vendas['estado'].unique())
+
+# Filtrando o dataframe de vendas com base nos filtros aplicados
+df_vendas['data'] = pd.to_datetime(df_vendas['data'], format='%d/%m/%Y')
+df_vendas_filtrado = df_vendas[(df_vendas['data'] >= pd.to_datetime(data_inicio)) & 
+                               (df_vendas['data'] <= pd.to_datetime(data_fim))]
+
+if estados_selecionados:
+    df_vendas_filtrado = df_vendas_filtrado[df_vendas_filtrado['estado'].isin(estados_selecionados)]
+
+# Total de produtos, vendas e lucro filtrados
+total_produtos = df_produtos['produto'].nunique()
+total_vendas = df_vendas_filtrado['vendas'].sum()
+total_lucro = df_vendas_filtrado['lucro'].sum()
+vendas_por_estado = df_vendas_filtrado.groupby('estado')['vendas'].sum()
+
+# Função para formatar valores monetários
+def formatar_monetario(valor):
+    return f'R$ {valor:,.2f}'.replace(",", "v").replace(".", ",").replace("v", ".")
+
+# Estilos de CSS para cartões
 def set_css_style():
     st.markdown("""
         <style>
+        .card-container {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 30px;
+        }
         .card {
-            background-color: #f9f9f9;
-            padding: 10px;
+            background-color: #ffffff;
+            padding: 20px;
             border-radius: 10px;
-            box-shadow: 2px 2px 5px rgba(0,0,0,0.1);
+            box-shadow: 2px 2px 10px rgba(0,0,0,0.1);
             font-size: 14px;
-            width: 180px;
-            margin-bottom: 10px;
-            margin-left: 10px;
-            color: black; /* Garante que o texto dentro dos cartões seja preto */
+            width: 22%;
+            text-align: center;
+            height: 120px; /* Altura fixa para padronizar */
         }
         .card-title {
-            font-size: 16px;
+            font-size: 18px;
             font-weight: bold;
-            color: black; /* Garante que o título seja preto */
+            color: #333;
         }
         .big-font {
-            font-size: 30px !important;
-            color: black !important; /* Garante que o texto grande seja preto */
+            font-size: 36px !important;
+            color: #2c3e50 !important;
         }
         </style>
         """, unsafe_allow_html=True)
 
-# Aplicar o CSS
 set_css_style()
 
-# Exemplo de cartão com texto estilizado
-st.markdown('<p class="big-font">Número de Produtos: {}</p>'.format(numero_total_produtos), unsafe_allow_html=True)
-
 # Título do dashboard
-st.title('Dashboard de Frutas e Legumes')
+st.title('Dashboard de Produtos e Vendas')
 
-# --- Adicionar cartões no topo esquerdo ---
-# Exibir os cartões com CSS aplicado
-total_produtos = df['produto'].nunique()
-total_frutas = df[df['categoria'] == 'Fruta']['produto'].nunique()
-total_legumes = df[df['categoria'] == 'Legume']['produto'].nunique()
-total_verduras = df[df['categoria'] == 'Verdura']['produto'].nunique()
+# --- Distribuição Widescreen ---
+st.markdown("### Indicadores Gerais")
 
-# Criando uma coluna para colocar os cartões no canto esquerdo
-st.sidebar.markdown("<div class='card'><div class='card-title'>Total de Produtos</div><div>" + str(total_produtos) + "</div></div>", unsafe_allow_html=True)
-st.sidebar.markdown("<div class='card'><div class='card-title'>Frutas</div><div>" + str(total_frutas) + "</div></div>", unsafe_allow_html=True)
-st.sidebar.markdown("<div class='card'><div class='card-title'>Legumes</div><div>" + str(total_legumes) + "</div></div>", unsafe_allow_html=True)
-st.sidebar.markdown("<div class='card'><div class='card-title'>Verduras</div><div>" + str(total_verduras) + "</div></div>", unsafe_allow_html=True)
+# Criar a linha de cartões com alinhamento no topo e tamanho padronizado
+st.markdown("""
+    <div class='card-container'>
+        <div class='card'>
+            <div class='card-title'>Total de Produtos</div>
+            <div class='big-font'>{}</div>
+        </div>
+        <div class='card'>
+            <div class='card-title'>Total de Vendas</div>
+            <div class='big-font'>{}</div>
+        </div>
+        <div class='card'>
+            <div class='card-title'>Lucro Total</div>
+            <div class='big-font'>{}</div>
+        </div>
+        <div class='card'>
+            <div class='card-title'>Estados com Vendas</div>
+            <div class='big-font'>{}</div>
+        </div>
+    </div>
+""".format(total_produtos, formatar_monetario(total_vendas), formatar_monetario(total_lucro), len(vendas_por_estado)), unsafe_allow_html=True)
 
-# --- Restante do dashboard ---
-# Layout com duas colunas para os gráficos
-col1, col2 = st.columns(2)
+# --- Gráficos ---
+st.markdown("### Análises de Vendas e Produtos")
 
-with col1:
-    st.subheader('Dados de Vendas')
-    st.dataframe(df)
+# Gráfico de barras por estado
+grafico_col1, grafico_col2 = st.columns(2)
 
-with col2:
-    fig = px.bar(df, x='produto', y='vendas', color='produto', 
-                 title="Vendas por produto", labels={'vendas':'Quantidade Vendida'},
-                 template='plotly_dark')
-    st.plotly_chart(fig)
+# Agrupar as vendas por estado e por mês
+df_vendas_filtrado['mes'] = df_vendas_filtrado['data'].dt.to_period('M')  # Cria uma coluna de período por mês
+df_vendas_agrupado = df_vendas_filtrado.groupby(['mes', 'estado'])['vendas'].sum().reset_index()
 
-# Criar um gráfico de pizza (Pie chart) como exemplo adicional
-fig_pie = px.pie(df, values='vendas', names='produto', title='Distribuição de Vendas por produto')
+# Converter a coluna 'mes' para string para evitar problemas de serialização
+df_vendas_agrupado['mes'] = df_vendas_agrupado['mes'].astype(str)
 
-# Exibir o gráfico de pizza
-st.plotly_chart(fig_pie)
+# Gráfico de barras mostrando vendas por estado (agora agrupado por mês)
+with grafico_col1:
+    fig_bar_estado = px.bar(df_vendas_agrupado, x='mes', y='vendas', color='estado', 
+                            title='Vendas por Estado (Agrupado por Mês)',
+                            labels={'vendas':'Vendas', 'mes':'Mês'},
+                            template='plotly_white')
+    fig_bar_estado.update_layout(height=400)
+    st.plotly_chart(fig_bar_estado)
 
-# --- Adicionar mapa interativo ---
-# Supondo que você tenha colunas 'Latitude' e 'Longitude' no CSV
-st.subheader("Mapa de Localização dos Produtos")
-
-# Verificando se existem colunas de latitude e longitude
-if 'latitude' in df.columns and 'longitude' in df.columns:
-    # Filtrar apenas valores válidos de latitude e longitude
-    df_valid = df[(df['latitude'] >= -90) & (df['latitude'] <= 90) &
-                  (df['longitude'] >= -180) & (df['longitude'] <= 180)]
+# Gráfico de linha para evolução de vendas por mês
+with grafico_col2:
+    fig_line = px.line(df_vendas_agrupado, x='mes', y='vendas', 
+                       title='Evolução de Vendas (Geral por Mês)',
+                       labels={'vendas':'Vendas', 'mes':'Mês'},
+                       template='plotly_white',
+                       markers=True)  # Adicionar marcadores nos pontos
     
-    if not df_valid.empty:
-        # Criar mapa interativo
-        st.map(df_valid[['latitude', 'longitude']])
-    else:
-        st.write("Os dados de latitude e longitude estão fora dos intervalos válidos.")
-else:
-    st.write("Os dados de latitude e longitude não estão disponíveis.")
+    # Adicionar anotação com os valores diretamente nas linhas
+    fig_line.update_traces(text=df_vendas_agrupado['vendas'].apply(lambda x: f'R${x:,.2f}'),
+                           textposition="top right",
+                           mode='lines+markers+text')  # Combina linhas, marcadores e texto
+    
+    fig_line.update_layout(height=400)
+    st.plotly_chart(fig_line)
+
+# --- Mapa Interativo e Top 10 Produtos Mais Vendidos ---
+st.markdown("### Mapa de Vendas e Top 10 Produtos Mais Vendidos")
+
+# Cruzar estados de vendas com a localização dos produtos
+df_vendas_loc = df_vendas_filtrado.merge(df_produtos[['produto', 'estado_de_origem', 'latitude', 'longitude']], left_on='produto', right_on='produto')
+
+# Verificar se a planilha de produtos tem as colunas de latitude e longitude
+with grafico_col1:
+    if 'latitude' in df_vendas_loc.columns and 'longitude' in df_vendas_loc.columns:
+        fig_mapa = px.scatter_mapbox(df_vendas_loc, lat='latitude', lon='longitude', 
+                                     size='vendas', hover_name='estado_de_origem', 
+                                     color_continuous_scale=px.colors.cyclical.IceFire,
+                                     size_max=15, zoom=3, title="Mapa Proporcional das Vendas por Estado")
+        fig_mapa.update_layout(mapbox_style="open-street-map")
+        fig_mapa.update_layout(margin={"r":0,"t":0,"l":0,"b":0})
+        st.plotly_chart(fig_mapa)
+
+# Top 10 produtos mais vendidos
+with grafico_col2:
+    st.markdown("#### Top 10 Produtos Mais Vendidos")
+    top_10_produtos = df_vendas_filtrado.groupby('produto')['vendas'].sum().nlargest(10).reset_index()
+    st.table(top_10_produtos)
