@@ -32,13 +32,13 @@ data_fim = st.date_input("Selecione a data de fim")
 # Filtro por estado
 estados_selecionados = st.multiselect("Selecione o(s) estado(s)", df_vendas['estado'].unique())
 
-# Filtrando o dataframe de vendas com base nos filtros aplicados
+# Filtrando o dataframe de vendas com base nos filtros aplicados e criando uma cópia
 df_vendas['data'] = pd.to_datetime(df_vendas['data'], format='%d/%m/%Y')
-df_vendas_filtrado = df_vendas[(df_vendas['data'] >= pd.to_datetime(data_inicio)) & 
-                               (df_vendas['data'] <= pd.to_datetime(data_fim))]
+df_vendas_filtrado = df_vendas.loc[(df_vendas['data'] >= pd.to_datetime(data_inicio)) & 
+                                   (df_vendas['data'] <= pd.to_datetime(data_fim))].copy()
 
 if estados_selecionados:
-    df_vendas_filtrado = df_vendas_filtrado[df_vendas_filtrado['estado'].isin(estados_selecionados)]
+    df_vendas_filtrado = df_vendas_filtrado.loc[df_vendas_filtrado['estado'].isin(estados_selecionados)].copy()
 
 # Total de produtos, vendas e lucro filtrados
 total_produtos = df_produtos['produto'].nunique()
@@ -152,19 +152,32 @@ with grafico_col2:
 # --- Mapa Interativo e Top 10 Produtos Mais Vendidos ---
 st.markdown("### Mapa de Vendas e Top 10 Produtos Mais Vendidos")
 
-# Cruzar estados de vendas com a localização dos produtos
-df_vendas_loc = df_vendas_filtrado.merge(df_produtos[['produto', 'estado_de_origem', 'latitude', 'longitude']], left_on='produto', right_on='produto')
+# Total de vendas por estado (para o cálculo das porcentagens)
+vendas_por_estado = df_vendas_filtrado.groupby('estado')['vendas'].sum().reset_index()
 
-# Verificar se a planilha de produtos tem as colunas de latitude e longitude
+# Normalizar os dados para exibir as esferas no mapa (tamanhos proporcionais)
+vendas_por_estado['percentual'] = 100 * (vendas_por_estado['vendas'] / vendas_por_estado['vendas'].sum())
+
+# Adicionar a coluna de latitude e longitude dos estados (Exemplo: fictício)
+df_loc = pd.DataFrame({
+    'estado': ['SP', 'RJ', 'MG', 'RS'],
+    'latitude': [-23.5505, -22.9068, -19.9167, -30.0346],
+    'longitude': [-46.6333, -43.1729, -43.9345, -51.2177]
+})
+df_vendas_loc = pd.merge(vendas_por_estado, df_loc, how='left', on='estado')
+
+# Gráfico Mapa Interativo (Esferas proporcionais por estado)
 with grafico_col1:
     if 'latitude' in df_vendas_loc.columns and 'longitude' in df_vendas_loc.columns:
-        fig_mapa = px.scatter_mapbox(df_vendas_loc, lat='latitude', lon='longitude', 
-                                     size='vendas', hover_name='estado_de_origem', 
-                                     color_continuous_scale=px.colors.cyclical.IceFire,
-                                     size_max=15, zoom=3, title="Mapa Proporcional das Vendas por Estado")
+        fig_mapa = px.scatter_mapbox(df_vendas_loc, lat="latitude", lon="longitude", 
+                                     size="percentual", hover_name="estado", 
+                                     hover_data={"percentual": ':.2f', 'vendas': True},
+                                     zoom=3, title="Mapa Proporcional das Vendas por Estado")
         fig_mapa.update_layout(mapbox_style="open-street-map")
         fig_mapa.update_layout(margin={"r":0,"t":0,"l":0,"b":0})
         st.plotly_chart(fig_mapa)
+    else:
+        st.error("Dados de latitude e longitude estão faltando para alguns estados.")
 
 # Top 10 produtos mais vendidos
 with grafico_col2:
